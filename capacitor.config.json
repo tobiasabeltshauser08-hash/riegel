@@ -1,0 +1,8 @@
+{
+  "appId": "app.riegel",
+  "appName": "Riegel",
+  "webDir": "www",
+  "android": {
+    "minWebViewVersion": 100
+  }
+}

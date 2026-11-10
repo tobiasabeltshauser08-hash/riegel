@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Riegel-Emblem (wie icons/icon.svg): Schloss mit waagrechtem Riegel, weiß auf Orange -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.184" android:scaleY="0.184" android:translateX="6.9" android:translateY="8">
+        <path android:strokeColor="#FFFFFF" android:strokeWidth="40" android:strokeLineCap="round" android:fillColor="#00000000"
+            android:pathData="M176,232 v-52 a80,80 0 0 1 160,0 v52" />
+        <path android:fillColor="#FFFFFF"
+            android:pathData="M172,228 h168 a36,36 0 0 1 36,36 v100 a36,36 0 0 1 -36,36 h-168 a36,36 0 0 1 -36,-36 v-100 a36,36 0 0 1 36,-36 z" />
+        <path android:fillColor="#7C2D12"
+            android:pathData="M122,296 h268 a18,18 0 0 1 0,36 h-268 a18,18 0 0 1 0,-36 z" />
+    </group>
+</vector>
