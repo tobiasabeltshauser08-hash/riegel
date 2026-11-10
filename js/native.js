@@ -37,7 +37,7 @@ const demoState = { limits: null, extras: {}, perms: { usage: false, overlay: fa
 
 function demoDays(n) {
   const out = [];
-  const pattern = { "com.instagram.android": [38, 25, 31, 18, 22, 14, 12], "com.zhiliaoapp.musically": [52, 41, 20, 22, 15, 19, 9],
+  const pattern = { "com.instagram.android": [38, 25, 31, 18, 22, 14, 12], "com.zhiliaoapp.musically": [52, 41, 20, 22, 15, 19, 26],
     "com.google.android.youtube": [30, 44, 35, 28, 20, 25, 17], "com.snapchat.android": [9, 7, 12, 6, 8, 5, 4],
     "com.whatsapp": [20, 25, 18, 30, 22, 19, 11], "com.spotify.music": [60, 45, 50, 70, 40, 55, 30] };
   for (let i = n - 1; i >= 0; i--) {

@@ -76,7 +76,7 @@ function viewPerm() {
   const st = PERM_STEPS[S.step];
   const has = !!S.perms[st.key];
   const bars = PERM_STEPS.map((_, i) => `<i class="${i <= S.step ? "on" : ""}"></i>`).join("") + (S.setupDone ? "" : "<i></i>");
-  return `${top(`Einrichten · Schritt ${S.step + 1} von ${PERM_STEPS.length + (S.setupDone ? 0 : 1)}`)}
+  return `${top(`${S.setupDone ? "Berechtigungen" : "Einrichten"} · Schritt ${S.step + 1} von ${PERM_STEPS.length + (S.setupDone ? 0 : 1)}`, S.setupDone)}
   <div class="steps" aria-hidden="true">${bars}</div>
   <section class="card perm">
     <h2>${esc(st.title)} ${has ? '<span class="done-tag">✓</span>' : ""}</h2>
@@ -99,7 +99,7 @@ function viewPick(setup) {
   const extra = Object.keys(d).filter(p => !appByPkg(p)).map(p => ({ pkg: p, label: knownLabel(p) }));
   const list = [...all, ...extra]
     .filter(a => !q || a.label.toLowerCase().includes(q))
-    .sort((a, b) => ((b.pkg in d) - (a.pkg in d)) || a.label.localeCompare(b.label, "de"));
+    .sort((a, b) => (S.pickTop.has(b.pkg) - S.pickTop.has(a.pkg)) || a.label.localeCompare(b.label, "de"));
   const opts = cur => `<option value="">Kein Limit</option>` +
     LIMIT_CHOICES.map(m => `<option value="${m}" ${cur === m ? "selected" : ""}>${m} min/Tag</option>`).join("");
   const loose = setup ? [] : loosened(S.cfg.limits, d);
@@ -123,6 +123,7 @@ function viewHome() {
   const t = today();
   const used = pkgs.reduce((s, p) => s + (t[p] || 0), 0);
   const allowed = pkgs.reduce((s, p) => s + allowedMs(S.cfg.limits[p], S.cfg.extras[p] || 0), 0);
+  const left = pkgs.reduce((s, p) => s + appState(t[p] || 0, S.cfg.limits[p], S.cfg.extras[p] || 0).left, 0);
   const miss = missing(S.perms);
   const st = streak(S.days, S.cfg.limits);
   const watching = S.cfg.running && !miss.length && pkgs.length;
@@ -143,7 +144,7 @@ function viewHome() {
   <section class="card hero">
     <span class="status ${watching ? "" : "off"}">${watching ? "Riegel ist aktiv" : "Riegel ist nicht aktiv"}</span>
     <span class="big num">${dur(used)}</span>
-    <span class="sub">Social Media heute${pkgs.length ? ` · ${leftText(Math.max(0, allowed - used))} übrig von ${dur(allowed)}` : ""}</span>
+    <span class="sub">begrenzte Apps heute${pkgs.length ? ` · <span class="nw">${leftText(left)}</span> übrig von <span class="nw">${dur(allowed)}</span>` : ""}</span>
     ${st ? `<span class="sub">${st === 1 ? "Gestern" : `${st} Tage in Folge`} alle Limits eingehalten</span>` : ""}
   </section>
   <section>
@@ -156,6 +157,9 @@ function viewHome() {
   </div>
   ${viewWeek(pkgs)}`;
 }
+
+// „1 h 40 min“ darf zwischen „1 h“ und „40 min“ umbrechen, aber nie zwischen Zahl und Einheit
+const tight = t => t.replace(/(\d) (h|min)/g, "$1\u00a0$2");
 
 // Letzte 7 Tage: eine Reihe (Social-Media-Zeit der begrenzten Apps pro Tag), Ø-Linie, Tabelle als Alternative
 function viewWeek(pkgs) {
@@ -184,11 +188,11 @@ function viewWeek(pkgs) {
         <div class="lbls">${lbls}</div>
       </div>
       <div class="stats-mini">
-        <div><b>${dur(avg)}</b><span>Ø pro Tag</span></div>
-        <div><b>${dur(sum)}</b><span>Summe</span></div>
-        <div><b>${dur(peak.total)}</b><span>meiste (${peak.label})</span></div>
+        <div><b>${tight(dur(avg))}</b><span>Ø pro Tag</span></div>
+        <div><b>${tight(dur(sum))}</b><span>Summe</span></div>
+        <div><b>${tight(dur(peak.total))}</b><span>meiste (${peak.label})</span></div>
       </div>
-      <details class="table"><summary>Als Tabelle</summary>${table}</details>
+      <details class="table" ${S.tableOpen ? "open" : ""}><summary>Als Tabelle</summary><div class="table-wrap">${table}</div></details>
     </div>
   </section>
   <section>
@@ -291,6 +295,9 @@ function bind() {
     else if (act === "code") {
       const block = e => e.preventDefault();
       el.addEventListener("paste", block); el.addEventListener("drop", block);
+      el.addEventListener("beforeinput", e => {
+        if (/^insertFrom|^insertReplacementText$/.test(e.inputType) || (e.data && e.data.replace(/\s/g, "").length > 2)) e.preventDefault();
+      });
       el.addEventListener("input", () => {
         H.input = el.value;
         if (codeMatches(H.input, H.code)) { passHurdle(); return; }
@@ -303,7 +310,9 @@ function bind() {
     const v = sel.value;
     if (v) S.draft[sel.dataset.pkg] = Number(v); else delete S.draft[sel.dataset.pkg];
     render();
+    $app.querySelector(`select[data-pkg="${CSS.escape(sel.dataset.pkg)}"]`)?.focus();   // Fokus bleibt auf der Auswahl
   }));
+  $app.querySelector("details.table")?.addEventListener("toggle", e => { S.tableOpen = e.target.open; });
 }
 
 const actions = {
@@ -316,6 +325,7 @@ const actions = {
     if (S.step < PERM_STEPS.length - 1) { S.step++; render(); return; }
     if (S.setupDone) { home(); return; }
     S.draft = { ...defaultLimits(S.apps) };
+    S.pickTop = new Set(Object.keys(S.draft));
     go("pick", false);
   },
   async start() {
@@ -327,7 +337,7 @@ const actions = {
     go("home", false);
   },
   fix() { S.step = Math.max(0, PERM_STEPS.findIndex(s => s.need && !S.perms[s.key])); go("perm"); },
-  limits() { S.draft = { ...S.cfg.limits }; S.query = ""; go("limits"); },
+  limits() { S.draft = { ...S.cfg.limits }; S.pickTop = new Set(Object.keys(S.draft)); S.query = ""; go("limits"); },
   async save() {
     const draft = { ...S.draft };
     const loose = loosened(S.cfg.limits, draft);
@@ -391,6 +401,7 @@ async function checkPending() {
 
 setInterval(async () => {
   if (document.hidden || S.view !== "home") return;
+  if (document.activeElement && document.activeElement !== document.body) return;
   await refreshUsage();
   render();
 }, 30_000);

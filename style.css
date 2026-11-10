@@ -37,6 +37,7 @@ h1, h2, h3 { text-wrap: balance; letter-spacing: -.01em; }
 .num { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
 
 .page { max-width: 560px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px calc(env(safe-area-inset-bottom, 0px) + 28px); display: grid; gap: 20px; }
+.page > * { min-width: 0; }
 .top { display: flex; align-items: center; gap: 12px; }
 .emblem { width: 40px; height: 40px; border-radius: 11px; background: var(--accent); color: #fff; display: grid; place-items: center; flex: none; }
 .emblem svg { width: 24px; height: 24px; }
@@ -71,6 +72,7 @@ button.banner { width: 100%; border: 0; text-align: left; cursor: pointer; }
 .hero { display: grid; gap: 4px; }
 .hero .big { font: 600 2.6rem/1 var(--f-mono); letter-spacing: -.03em; }
 .hero .sub { color: var(--muted); font-size: .9rem; }
+.nw { white-space: nowrap; }
 .status { display: inline-flex; align-items: center; gap: 8px; font-size: .85rem; font-weight: 600; }
 .status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); }
 .status.off::before { background: var(--accent); }
@@ -108,13 +110,14 @@ button.banner { width: 100%; border: 0; text-align: left; cursor: pointer; }
 .plot .avg span { position: absolute; left: 0; bottom: 2px; font-size: .7rem; color: var(--muted); background: var(--surface); padding: 0 3px; border-radius: 3px; }
 .lbls { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; font-size: .75rem; color: var(--muted); text-align: center; }
 .lbls .today { color: var(--ink); font-weight: 600; }
-.stats-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.stats-mini { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
 .stats-mini div { background: var(--surface-2); border-radius: 10px; padding: 10px; }
-.stats-mini b { display: block; font: 600 1.05rem var(--f-mono); }
+.stats-mini b { display: block; font: 600 .98rem var(--f-mono); }
 .stats-mini span { font-size: .75rem; color: var(--muted); }
 details.table summary { cursor: pointer; font-size: .85rem; color: var(--muted); margin-top: 12px; }
-details.table table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 8px; }
-details.table td, details.table th { padding: 6px 4px; border-top: 1px solid var(--line); text-align: right; }
+details.table .table-wrap { overflow-x: auto; margin-top: 8px; }
+details.table table { min-width: 100%; border-collapse: collapse; font-size: .85rem; }
+details.table td, details.table th { padding: 6px 6px; white-space: nowrap; border-top: 1px solid var(--line); text-align: right; }
 details.table td:first-child, details.table th:first-child { text-align: left; }
 
 /* Assistent */
@@ -140,5 +143,5 @@ details.table td:first-child, details.table th:first-child { text-align: left; }
 .tabs button[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
 .change-list { margin: 0; padding-left: 18px; }
 
-.toast { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: .9rem; max-width: calc(100% - 32px); z-index: 10; }
+.toast { pointer-events: none; position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 20px); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-size: .9rem; max-width: calc(100% - 32px); z-index: 10; }
 .empty { padding: 20px 16px; text-align: center; color: var(--muted); font-size: .9rem; }

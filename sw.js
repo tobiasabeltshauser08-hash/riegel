@@ -1,6 +1,6 @@
 // Service Worker: speichert die Vorschau, damit sie auch offline läuft (nur im Browser; die Android-App braucht ihn nicht).
 // Nach Änderungen an den Dateien die Versionsnummer erhöhen.
-const CACHE = 'riegel-v1';
+const CACHE = 'riegel-v2';
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest',
   'js/app.js', 'js/logic.js', 'js/native.js',
