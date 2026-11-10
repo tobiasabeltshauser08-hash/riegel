@@ -6,8 +6,10 @@ export const OWN_PACKAGE = "app.riegel";
 // Bekannte Social-Media-Apps. Beim Einrichten bekommt jede installierte davon ein Tageslimit.
 export const SOCIAL = {
   "com.instagram.android": "Instagram",
+  "com.instagram.lite": "Instagram Lite",
   "com.zhiliaoapp.musically": "TikTok",
   "com.ss.android.ugc.trill": "TikTok",
+  "com.zhiliaoapp.musically.go": "TikTok Lite",
   "com.google.android.youtube": "YouTube",
   "com.snapchat.android": "Snapchat",
   "com.facebook.katana": "Facebook",

@@ -11,7 +11,7 @@ const call = (method, options = {}) => cap().nativePromise("Guard", method, opti
 const native = {
   permissions: () => call("permissions"),                      // { usage, overlay, notifications, battery }
   request: which => call("request", { which }),                // Systemdialog bzw. Systemseite öffnen
-  apps: () => call("apps").then(r => r.apps),                  // [{ pkg, label, icon, never }]
+  apps: () => call("apps", { known: Object.keys(SOCIAL) }).then(r => r.apps), // [{ pkg, label, icon, never }]
   config: () => call("config"),                                // { limits: {pkg: min}, extras: {pkg: min}, running }
   setLimits: limits => call("setLimits", { limits }),          // speichert und startet/stoppt den Wächter
   addExtra: (pkg, minutes) => call("addExtra", { pkg, minutes }),

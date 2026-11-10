@@ -2,6 +2,7 @@ package app.riegel.guard;
 
 import android.Manifest;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Bitmap;
@@ -111,6 +112,23 @@ public class GuardPlugin extends Plugin {
                 a.put("never", never.contains(pkg));
                 a.put("icon", iconData(r.loadIcon(pm)));
                 list.put(a);
+            }
+            // Bekannte Social-Media-Apps, die der Launcher nicht gemeldet hat (z. B. bei manchen Herstellern)
+            JSArray known = call.getArray("known", new JSArray());
+            for (int i = 0; i < known.length(); i++) {
+                String pkg = known.optString(i, "");
+                if (pkg.isEmpty() || seen.contains(pkg)) continue;
+                try {
+                    ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+                    if (!ai.enabled) continue;
+                    seen.add(pkg);
+                    JSObject a = new JSObject();
+                    a.put("pkg", pkg);
+                    a.put("label", pm.getApplicationLabel(ai).toString());
+                    a.put("never", never.contains(pkg));
+                    a.put("icon", iconData(pm.getApplicationIcon(ai)));
+                    list.put(a);
+                } catch (PackageManager.NameNotFoundException ignored) {}
             }
             JSObject res = new JSObject();
             res.put("apps", list);

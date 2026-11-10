@@ -1,7 +1,8 @@
 // Selbsttest für die Logik von Riegel. Aufruf: node tests/logic.test.js
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
-  defaultLimits, loosened, dur, leftText, appState, makeCode, groups, codeMatches, codeProgress,
+  SOCIAL, defaultLimits, loosened, dur, leftText, appState, makeCode, groups, codeMatches, codeProgress,
   CODE_CHARS, CODE_LEN, dayKey, weekday, series, perApp, streak, missing, OWN_PACKAGE, DEFAULT_LIMIT,
 } from "../js/logic.js";
 
@@ -13,6 +14,15 @@ const app = (pkg, never = false) => ({ pkg, label: pkg, never });
     app("com.whatsapp"), app(OWN_PACKAGE), app("com.google.android.youtube", true)];
   assert.deepEqual(defaultLimits(apps), { "com.instagram.android": DEFAULT_LIMIT, "com.ss.android.ugc.trill": DEFAULT_LIMIT });
   assert.deepEqual(defaultLimits([]), {});
+  // Lite-Versionen bekommen ebenfalls ein Limit
+  assert.deepEqual(defaultLimits([app("com.instagram.lite"), app("com.zhiliaoapp.musically.go")]),
+    { "com.instagram.lite": DEFAULT_LIMIT, "com.zhiliaoapp.musically.go": DEFAULT_LIMIT });
+}
+
+// Jede bekannte Social-Media-App steht in den <queries> des Manifests, sonst sieht Android sie nicht
+{
+  const manifest = readFileSync(new URL("../android/app/src/main/AndroidManifest.xml", import.meta.url), "utf8");
+  for (const pkg of Object.keys(SOCIAL)) assert.ok(manifest.includes(`<package android:name="${pkg}" />`), pkg + " fehlt im Manifest");
 }
 
 // Lockern erkennt: höheres Limit, entferntes Limit. Strenger/neu begrenzt ist kein Lockern.
