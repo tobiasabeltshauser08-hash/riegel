@@ -3,6 +3,7 @@ package app.riegel.guard;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -19,7 +20,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Dauerhaft gespeicherte Einstellungen: Tageslimits, Extra-Minuten von heute, Warnungen von heute,
+ * Dauerhaft gespeicherte Einstellungen: Tageslimits, Zeitfenster, Extra-Minuten von heute, Warnungen von heute,
  * Bitte „Mehr Zeit“ vom Sperrbildschirm und die Tageswerte der letzten Wochen.
  */
 public final class GuardState {
@@ -39,6 +40,33 @@ public final class GuardState {
     public Map<String, Integer> limits() { return readInts(p.getString("limits", "{}")); }
 
     public void setLimits(Map<String, Integer> limits) { p.edit().putString("limits", writeInts(limits)).apply(); }
+
+    // ---------- Zeitfenster: pkg → {von, bis} in Minuten nach Mitternacht ----------
+
+    public Map<String, int[]> windows() {
+        Map<String, int[]> m = new HashMap<>();
+        try {
+            JSONObject o = new JSONObject(p.getString("windows", "{}"));
+            for (Iterator<String> it = o.keys(); it.hasNext(); ) {
+                String k = it.next();
+                JSONArray a = o.getJSONArray(k);
+                m.put(k, new int[] { a.getInt(0), a.getInt(1) });
+            }
+        } catch (JSONException ignored) {}
+        return m;
+    }
+
+    public void setWindows(Map<String, int[]> windows) {
+        JSONObject o = new JSONObject();
+        try {
+            for (Map.Entry<String, int[]> e : windows.entrySet())
+                o.put(e.getKey(), new JSONArray().put(e.getValue()[0]).put(e.getValue()[1]));
+        } catch (JSONException ignored) {}
+        p.edit().putString("windows", o.toString()).apply();
+    }
+
+    /** Gibt es irgendetwas zu bewachen? */
+    public boolean guardsAnything() { return !limits().isEmpty() || !windows().isEmpty(); }
 
     // ---------- Extra-Minuten, gelten nur heute ----------
 

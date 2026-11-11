@@ -41,9 +41,10 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Wacht dauerhaft im Vordergrund, solange mindestens eine App ein Tageslimit hat.
+ * Wacht dauerhaft im Vordergrund, solange mindestens eine App ein Tageslimit oder ein Zeitfenster hat.
  * Prüft bei eingeschaltetem Bildschirm etwa alle 500 ms, welche App vorne ist, rechnet alle 5 s
- * die Nutzung seit Mitternacht neu und legt über eine App, deren Zeit aufgebraucht ist, den Sperrbildschirm.
+ * die Nutzung seit Mitternacht neu und legt über eine App, deren Zeit aufgebraucht ist oder die außerhalb
+ * ihres Zeitfensters liegt, den Sperrbildschirm.
  */
 public class GuardService extends Service {
     private static final String CH_RUN = "riegel_guard", CH_WARN = "riegel_warn";
@@ -57,6 +58,7 @@ public class GuardService extends Service {
     private GuardState state;
     private Set<String> never;
     private Map<String, Integer> limits;
+    private Map<String, int[]> windows;
 
     private Usage.Result base;              // Nutzung seit Mitternacht, Stand baseAt
     private long baseAt, lastQuery;
@@ -64,12 +66,12 @@ public class GuardService extends Service {
 
     private WindowManager wm;
     private View overlay;
-    private TextView overlayApp;
+    private TextView overlayTitle, overlayApp, overlayMore, overlayNote;
     private String overlayPkg;
 
     /** Startet den Dienst, wenn es Limits gibt und die Berechtigungen da sind; sonst stoppt er ihn. */
     public static boolean ensure(Context ctx) {
-        boolean should = !new GuardState(ctx).limits().isEmpty() && Apps.canGuard(ctx);
+        boolean should = new GuardState(ctx).guardsAnything() && Apps.canGuard(ctx);
         if (should) {
             try {
                 androidx.core.content.ContextCompat.startForegroundService(ctx, new Intent(ctx, GuardService.class));
@@ -86,13 +88,12 @@ public class GuardService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         state = new GuardState(this);
         never = Apps.neverBlocked(this);
-        limits = state.limits();
-        for (String n : never) limits.remove(n);
+        loadConfig();
         createChannels();
         // startForeground muss auch dann aufgerufen werden, wenn wir gleich wieder aufhören
         ServiceCompat.startForeground(this, NID, buildNotification(0),
             Build.VERSION.SDK_INT >= 34 ? ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE : 0);
-        if (limits.isEmpty() || !Apps.canGuard(this)) { quit(); return START_NOT_STICKY; }
+        if ((limits.isEmpty() && windows.isEmpty()) || !Apps.canGuard(this)) { quit(); return START_NOT_STICKY; }
         base = null;                               // Limits können sich geändert haben: neu rechnen
         if (!running) {
             running = true;
@@ -115,7 +116,7 @@ public class GuardService extends Service {
             if (!Apps.canGuard(GuardService.this)) { quit(); return; }
             String before = foreground;
             pollForeground(now);
-            boolean switched = foreground != null && !foreground.equals(before) && limits.containsKey(foreground);
+            boolean switched = foreground != null && !foreground.equals(before) && guarded(foreground);
             if (base == null || switched || now - baseAt >= RECOMPUTE_MS || !GuardState.today().equals(baseDay)) recompute(now);
             check(now);
             handler.postDelayed(this, POLL_MS);
@@ -150,10 +151,17 @@ public class GuardService extends Service {
         baseAt = now;
         baseDay = today;
         if (base.current != null) foreground = base.current;
-        limits = state.limits();
-        for (String n : never) limits.remove(n);
+        loadConfig();
         updateNotification();
     }
+
+    private void loadConfig() {
+        limits = state.limits();
+        windows = state.windows();
+        for (String n : never) { limits.remove(n); windows.remove(n); }
+    }
+
+    private boolean guarded(String pkg) { return limits.containsKey(pkg) || windows.containsKey(pkg); }
 
     /** Vordergrundzeit je App im Zeitraum [from, to]. Liest ab 3 h vorher, damit laufende Nutzung über die Grenze zählt. */
     public static Usage.Result measure(Context ctx, long from, long to) {
@@ -187,7 +195,10 @@ public class GuardService extends Service {
 
     private void check(long now) {
         String fg = foreground;
-        if (fg == null || !limits.containsKey(fg) || never.contains(fg)) { hideOverlay(); return; }
+        if (fg == null || never.contains(fg)) { hideOverlay(); return; }
+        int[] w = windows.get(fg);
+        if (w != null) { checkWindow(fg, w, now); return; }
+        if (!limits.containsKey(fg)) { hideOverlay(); return; }
         long allowed = state.allowedMin(fg) * 60_000L;
         long u = used(fg, now);
         if (u >= allowed) { showOverlay(fg, u); return; }
@@ -206,10 +217,32 @@ public class GuardService extends Service {
         }
     }
 
+    /** Zeitfenster: außerhalb ganz gesperrt (ohne „Mehr Zeit“), 2 min vor dem Ende eine Warnung. */
+    private void checkWindow(String pkg, int[] w, long now) {
+        Calendar c = Calendar.getInstance();
+        c.setTimeInMillis(now);
+        int minute = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
+        if (!Window.in(minute, w[0], w[1])) { showWindowOverlay(pkg, w); return; }
+        hideOverlay();
+        long left = Window.msUntil(minute, c.get(Calendar.SECOND) * 1000L + c.get(Calendar.MILLISECOND), w[1]);
+        if (left <= WARN_MS && !state.warned(pkg)) {
+            state.setWarned(pkg);
+            if (Apps.hasNotifications(this)) getSystemService(NotificationManager.class).notify(NID_WARN,
+                new NotificationCompat.Builder(this, CH_WARN)
+                    .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
+                    .setContentTitle(Window.warn(label(pkg), left, w[0]))
+                    .setContentText("Danach sperrt Riegel die App bis " + Window.hm(w[0]) + ".")
+                    .setAutoCancel(true)
+                    .setTimeoutAfter(left)
+                    .build());
+        }
+    }
+
     // ---------- Sperrbildschirm ----------
 
-    private void showOverlay(String pkg, long usedMs) {
-        if (!Apps.hasOverlay(this)) return;
+    /** Sperrbildschirm anlegen, falls noch nicht da. false, wenn das nicht geht (Berechtigung fehlt). */
+    private boolean addOverlay() {
+        if (!Apps.hasOverlay(this)) return false;
         if (overlay == null) {
             wm = (WindowManager) getSystemService(WINDOW_SERVICE);
             overlay = buildOverlay();
@@ -219,16 +252,33 @@ public class GuardService extends Service {
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 PixelFormat.OPAQUE);
             lp.gravity = Gravity.CENTER;
-            try { wm.addView(overlay, lp); } catch (Exception ex) { overlay = null; return; }
+            try { wm.addView(overlay, lp); } catch (Exception ex) { overlay = null; return false; }
         }
+        return true;
+    }
+
+    private void showOverlay(String pkg, long usedMs) {
+        if (!addOverlay()) return;
         overlayPkg = pkg;
+        overlayTitle.setText("Zeit für heute aufgebraucht");
         overlayApp.setText(Texts.reached(label(pkg), usedMs, state.allowedMin(pkg)) + "\nMorgen ab 0:00 ist sie wieder frei.");
+        overlayMore.setVisibility(View.VISIBLE);
+        overlayNote.setVisibility(View.VISIBLE);
+    }
+
+    private void showWindowOverlay(String pkg, int[] w) {
+        if (!addOverlay()) return;
+        overlayPkg = pkg;
+        overlayTitle.setText("Gerade gesperrt");
+        overlayApp.setText(Window.blocked(label(pkg), w[0], w[1]) + "\nAb " + Window.hm(w[0]) + " ist sie wieder frei.");
+        overlayMore.setVisibility(View.GONE);
+        overlayNote.setVisibility(View.GONE);
     }
 
     private void hideOverlay() {
         if (overlay == null) return;
         try { wm.removeView(overlay); } catch (Exception ignored) {}
-        overlay = null; overlayApp = null; overlayPkg = null;
+        overlay = null; overlayTitle = overlayApp = overlayMore = overlayNote = null; overlayPkg = null;
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -249,21 +299,21 @@ public class GuardService extends Service {
         root.addView(col, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
 
         TextView lock = text("🔒", 44, Color.WHITE, false);
-        TextView title = text("Zeit für heute aufgebraucht", 28, Color.WHITE, true);
+        overlayTitle = text("", 28, Color.WHITE, true);
         overlayApp = text("", 16, 0xFFB9B3A8, false);
         col.addView(lock);
-        col.addView(title, margins(dp(10), 0));
+        col.addView(overlayTitle, margins(dp(10), 0));
         col.addView(overlayApp, margins(dp(14), dp(40)));
 
         TextView homeBtn = button("Zum Startbildschirm", 0xFFF07A3C, Color.WHITE, 0xFFF07A3C);
         homeBtn.setOnClickListener(v -> goHome());
         col.addView(homeBtn, margins(0, dp(12)));
 
-        TextView more = button("Mehr Zeit …", Color.TRANSPARENT, Color.WHITE, 0xFF4A4740);
-        more.setOnClickListener(v -> askMore());
-        col.addView(more, margins(0, 0));
-        TextView note = text("Mehr Zeit gibt es nur mit Code oder 5 Minuten Warten.", 13, 0xFF8A857B, false);
-        col.addView(note, margins(dp(10), 0));
+        overlayMore = button("Mehr Zeit …", Color.TRANSPARENT, Color.WHITE, 0xFF4A4740);
+        overlayMore.setOnClickListener(v -> askMore());
+        col.addView(overlayMore, margins(0, 0));
+        overlayNote = text("Mehr Zeit gibt es nur mit Code oder 5 Minuten Warten.", 13, 0xFF8A857B, false);
+        col.addView(overlayNote, margins(dp(10), 0));
         return root;
     }
 
@@ -276,7 +326,7 @@ public class GuardService extends Service {
 
     /** „Mehr Zeit …“: Riegel öffnen, dort kommt die Hürde für diese App. */
     private void askMore() {
-        if (overlayPkg != null) state.setPendingExtra(overlayPkg);
+        if (overlayPkg != null && limits.containsKey(overlayPkg)) state.setPendingExtra(overlayPkg);
         openRiegel();
     }
 
@@ -320,7 +370,7 @@ public class GuardService extends Service {
         return new NotificationCompat.Builder(this, CH_RUN)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentTitle("Riegel wacht")
-            .setContentText(Texts.notification(totalMs, limits == null ? 0 : limits.size()))
+            .setContentText(Texts.notification(totalMs, limits == null ? 0 : limits.size() + windows.size()))
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setShowWhen(false)
@@ -332,7 +382,8 @@ public class GuardService extends Service {
     private void updateNotification() {
         long total = 0;
         for (String pkg : limits.keySet()) total += base.get(pkg);
-        String t = Texts.notification(total, limits.size());
+        for (String pkg : windows.keySet()) total += base.get(pkg);
+        String t = Texts.notification(total, limits.size() + windows.size());
         if (t.equals(notifText)) return;
         notifText = t;
         getSystemService(NotificationManager.class).notify(NID, buildNotification(total));

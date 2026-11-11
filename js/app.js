@@ -1,12 +1,13 @@
-// Riegel – Oberfläche: Einrichtung, Heute + 7 Tage, Limits ändern, Mehr Zeit, Hürde (Code oder Warten).
+// Riegel – Oberfläche: Einrichtung, Heute + 7 Tage, Limits und Zeitfenster ändern, Mehr Zeit, Hürde (Code oder Warten).
 import {
-  PERM_STEPS, missing, limitable, defaultLimits, loosened, LIMIT_CHOICES, EXTRA_MIN, WAIT_MS,
+  PERM_STEPS, missing, limitable, defaultLimits, loosenedCfg, LIMIT_CHOICES, EXTRA_MIN, WAIT_MS,
+  DEFAULT_WINDOW, windowText, windowState, hhmm, parseHm,
   appState, allowedMs, dur, leftText, makeCode, groups, codeMatches, codeProgress, series, perApp, streak,
 } from "./logic.js";
 import { Guard, isNative, knownLabel } from "./native.js";
 
 const $app = document.getElementById("app");
-const S = { view: "load", apps: [], cfg: { limits: {}, extras: {} }, perms: {}, days: [], step: 0, draft: null, query: "" };
+const S = { view: "load", apps: [], cfg: { limits: {}, windows: {}, extras: {} }, perms: {}, days: [], step: 0, draft: null, query: "" };
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const store = {
@@ -27,7 +28,11 @@ const iconImg = pkg => {
   const src = appByPkg(pkg)?.icon;
   return src ? `<img src="${esc(src)}" alt="">` : '<span class="ph"></span>';
 };
-const limited = () => Object.keys(S.cfg.limits).sort((a, b) => label(a).localeCompare(label(b), "de"));
+const byLabel = pkgs => pkgs.sort((a, b) => label(a).localeCompare(label(b), "de"));
+const limited = () => byLabel(Object.keys(S.cfg.limits));                 // Apps mit Tageslimit
+const windowed = () => byLabel(Object.keys(S.cfg.windows || {}));         // Apps mit Zeitfenster
+const guarded = () => byLabel([...limited(), ...windowed()]);
+const nowMinute = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
 const today = () => S.days[S.days.length - 1]?.apps || {};
 
 async function loadAll() {
@@ -96,38 +101,49 @@ function viewPick(setup) {
   const d = S.draft;
   const q = S.query.trim().toLowerCase();
   const all = S.apps.filter(limitable);
-  const extra = Object.keys(d).filter(p => !appByPkg(p)).map(p => ({ pkg: p, label: knownLabel(p) }));
+  const extra = [...Object.keys(d.limits), ...Object.keys(d.windows)].filter(p => !appByPkg(p)).map(p => ({ pkg: p, label: knownLabel(p) }));
   const list = [...all, ...extra]
     .filter(a => !q || a.label.toLowerCase().includes(q))
     .sort((a, b) => (S.pickTop.has(b.pkg) - S.pickTop.has(a.pkg)) || a.label.localeCompare(b.label, "de"));
-  const opts = cur => `<option value="">Kein Limit</option>` +
-    LIMIT_CHOICES.map(m => `<option value="${m}" ${cur === m ? "selected" : ""}>${m} min/Tag</option>`).join("");
-  const loose = setup ? [] : loosened(S.cfg.limits, d);
+  const opts = pkg => `<option value="">Kein Limit</option>` +
+    LIMIT_CHOICES.map(m => `<option value="${m}" ${d.limits[pkg] === m ? "selected" : ""}>${m} min/Tag</option>`).join("") +
+    `<option value="w" ${pkg in d.windows ? "selected" : ""}>Nur frei von … bis …</option>`;
+  const times = a => {
+    const w = d.windows[a.pkg];
+    if (!w) return "";
+    return `<span class="win">frei von <input type="time" data-win="0" data-pkg="${esc(a.pkg)}" value="${hhmm(w[0])}" aria-label="${esc(a.label)} frei ab">
+      bis <input type="time" data-win="1" data-pkg="${esc(a.pkg)}" value="${hhmm(w[1])}" aria-label="${esc(a.label)} frei bis">
+      ${w[0] === w[1] ? '<b class="lim-hint">Von und bis müssen verschieden sein</b>' : "<span>sonst ganz gesperrt</span>"}</span>`;
+  };
+  const loose = setup ? [] : loosenedCfg(S.cfg, d);
+  const bad = Object.values(d.windows).some(w => w[0] === w[1]);
   const rows = list.map(a => `<li class="row pick">${iconImg(a.pkg)}<span class="name">${esc(a.label)}</span>
-      <select data-pkg="${esc(a.pkg)}" aria-label="Tageslimit für ${esc(a.label)}">${opts(d[a.pkg])}</select>
+      <select data-pkg="${esc(a.pkg)}" aria-label="Limit für ${esc(a.label)}">${opts(a.pkg)}</select>
+      ${times(a)}
       ${loose.includes(a.pkg) ? `<span class="lim-hint">mehr Zeit → braucht Code oder 5 min Warten</span>` : ""}</li>`).join("");
-  const n = Object.keys(d).length;
+  const n = Object.keys(d.limits).length + Object.keys(d.windows).length;
   return `${top(setup ? "Einrichten · Tageslimits" : "Limits ändern", !setup)}
   <div><h2 class="h-title">${setup ? "Wie viel Zeit pro Tag?" : "Tageslimits"}</h2>
   <p class="lead">${setup
     ? "Bekannte Social-Media-Apps sind schon vorgewählt. Ist die Zeit einer App für heute aufgebraucht, sperrt Riegel sie bis Mitternacht."
-    : "Strenger stellen geht sofort. Mehr Zeit oder ein Limit entfernen geht nur mit Code oder 5 Minuten Warten."}</p></div>
+    : "Strenger stellen geht sofort. Mehr Zeit oder ein Limit entfernen geht nur mit Code oder 5 Minuten Warten."}
+    Mit „Nur frei von … bis …“ ist eine App außerhalb dieser Zeit ganz gesperrt.</p></div>
   <input class="search" type="search" placeholder="App suchen" value="${esc(S.query)}" data-act="search" aria-label="App suchen">
   <ul class="rows card flush">${rows || '<li class="empty">Keine App gefunden.</li>'}</ul>
-  <button class="btn accent block" data-act="${setup ? "start" : "save"}" ${setup && !n ? "disabled" : ""}>
+  <button class="btn accent block" data-act="${setup ? "start" : "save"}" ${(setup && !n) || bad ? "disabled" : ""}>
     ${setup ? `Riegel starten · ${n === 1 ? "1 App" : n + " Apps"}` : loose.length ? "Speichern (mit Hürde)" : "Speichern"}</button>`;
 }
 
 function viewHome() {
-  const pkgs = limited();
+  const pkgs = limited(), wins = windowed(), all = guarded();
   const t = today();
-  const used = pkgs.reduce((s, p) => s + (t[p] || 0), 0);
+  const used = all.reduce((s, p) => s + (t[p] || 0), 0);
   const allowed = pkgs.reduce((s, p) => s + allowedMs(S.cfg.limits[p], S.cfg.extras[p] || 0), 0);
   const left = pkgs.reduce((s, p) => s + appState(t[p] || 0, S.cfg.limits[p], S.cfg.extras[p] || 0).left, 0);
   const miss = missing(S.perms);
   const st = streak(S.days, S.cfg.limits);
-  const watching = S.cfg.running && !miss.length && pkgs.length;
-  const sub = !pkgs.length ? "keine App begrenzt" : watching ? `wacht · ${pkgs.length === 1 ? "1 App" : pkgs.length + " Apps"} begrenzt` : "schläft – Berechtigung fehlt";
+  const watching = S.cfg.running && !miss.length && all.length;
+  const sub = !all.length ? "keine App begrenzt" : watching ? `wacht · ${all.length === 1 ? "1 App" : all.length + " Apps"} begrenzt` : "schläft – Berechtigung fehlt";
 
   const rows = pkgs.map(p => {
     const lim = S.cfg.limits[p], ex = S.cfg.extras[p] || 0, u = t[p] || 0;
@@ -136,6 +152,11 @@ function viewHome() {
       <span class="val num">${dur(u)} / ${lim + ex} min</span>
       <span class="meter ${s.over ? "over" : ""}" role="img" aria-label="${Math.round(s.ratio * 100)} Prozent verbraucht"><i style="width:${(s.ratio * 100).toFixed(1)}%"></i></span>
       <span class="meta ${s.over ? "over" : ""}"><span>${s.text}</span><span>${ex ? `+${ex} min extra` : ""}</span></span></li>`;
+  }).join("") + wins.map(p => {
+    const w = S.cfg.windows[p], s = windowState(w, nowMinute());
+    return `<li class="row">${iconImg(p)}<span class="name">${esc(label(p))}</span>
+      <span class="val num">${dur(t[p] || 0)}</span>
+      <span class="meta ${s.open ? "" : "over"}"><span>${s.text}</span><span>${windowText(w)}</span></span></li>`;
   }).join("");
 
   return `${top(sub)}
@@ -148,14 +169,14 @@ function viewHome() {
     ${st ? `<span class="sub">${st === 1 ? "Gestern" : `${st} Tage in Folge`} alle Limits eingehalten</span>` : ""}
   </section>
   <section>
-    <div class="sec-h"><h2>Heute</h2><span>wieder frei um 0:00</span></div>
+    <div class="sec-h"><h2>Heute</h2><span>${pkgs.length ? "Tageslimits wieder frei um 0:00" : ""}</span></div>
     <ul class="rows card flush">${rows || '<li class="empty">Noch keine App begrenzt.</li>'}</ul>
   </section>
   <div class="btns">
     <button class="btn sec" data-act="limits">Limits ändern</button>
     <button class="btn sec" data-act="extra" ${pkgs.length ? "" : "disabled"}>Mehr Zeit für heute</button>
   </div>
-  ${viewWeek(pkgs)}`;
+  ${viewWeek(all)}`;
 }
 
 // „1 h 40 min“ darf zwischen „1 h“ und „40 min“ umbrechen, aber nie zwischen Zahl und Einheit
@@ -307,10 +328,20 @@ function bind() {
     else el.addEventListener("click", () => actions[act]?.(el));
   });
   $app.querySelectorAll("select[data-pkg]").forEach(sel => sel.addEventListener("change", () => {
-    const v = sel.value;
-    if (v) S.draft[sel.dataset.pkg] = Number(v); else delete S.draft[sel.dataset.pkg];
+    const v = sel.value, pkg = sel.dataset.pkg, d = S.draft;
+    const keep = d.windows[pkg];
+    delete d.limits[pkg]; delete d.windows[pkg];
+    if (v === "w") d.windows[pkg] = keep || S.cfg.windows?.[pkg] || [...DEFAULT_WINDOW];
+    else if (v) d.limits[pkg] = Number(v);
     render();
-    $app.querySelector(`select[data-pkg="${CSS.escape(sel.dataset.pkg)}"]`)?.focus();   // Fokus bleibt auf der Auswahl
+    $app.querySelector(`select[data-pkg="${CSS.escape(pkg)}"]`)?.focus();   // Fokus bleibt auf der Auswahl
+  }));
+  $app.querySelectorAll("input[data-win]").forEach(inp => inp.addEventListener("change", () => {
+    const m = parseHm(inp.value), pkg = inp.dataset.pkg, w = S.draft.windows[pkg];
+    if (m === null || !w) return;
+    w[+inp.dataset.win] = m;
+    render();
+    $app.querySelector(`input[data-win="${inp.dataset.win}"][data-pkg="${CSS.escape(pkg)}"]`)?.focus();
   }));
   $app.querySelector("details.table")?.addEventListener("toggle", e => { S.tableOpen = e.target.open; });
 }
@@ -324,12 +355,12 @@ const actions = {
   next() {
     if (S.step < PERM_STEPS.length - 1) { S.step++; render(); return; }
     if (S.setupDone) { home(); return; }
-    S.draft = { ...defaultLimits(S.apps) };
-    S.pickTop = new Set(Object.keys(S.draft));
+    S.draft = { limits: defaultLimits(S.apps), windows: {} };
+    S.pickTop = new Set(Object.keys(S.draft.limits));
     go("pick", false);
   },
   async start() {
-    await Guard.setLimits(S.draft);
+    await Guard.setLimits(S.draft.limits, S.draft.windows);
     S.setupDone = true;
     if (isNative()) store.set("setup", "1");
     S.cfg = await Guard.config();
@@ -337,13 +368,20 @@ const actions = {
     go("home", false);
   },
   fix() { S.step = Math.max(0, PERM_STEPS.findIndex(s => s.need && !S.perms[s.key])); go("perm"); },
-  limits() { S.draft = { ...S.cfg.limits }; S.pickTop = new Set(Object.keys(S.draft)); S.query = ""; go("limits"); },
+  limits() {
+    const w = S.cfg.windows || {};
+    S.draft = { limits: { ...S.cfg.limits }, windows: Object.fromEntries(Object.entries(w).map(([p, v]) => [p, [...v]])) };
+    S.pickTop = new Set([...Object.keys(S.draft.limits), ...Object.keys(S.draft.windows)]);
+    S.query = "";
+    go("limits");
+  },
   async save() {
-    const draft = { ...S.draft };
-    const loose = loosened(S.cfg.limits, draft);
-    const apply = async () => { await Guard.setLimits(draft); S.cfg = await Guard.config(); toast("Limits gespeichert"); };
+    const draft = { limits: { ...S.draft.limits }, windows: { ...S.draft.windows } };
+    const loose = loosenedCfg(S.cfg, draft);
+    const apply = async () => { await Guard.setLimits(draft.limits, draft.windows); S.cfg = await Guard.config(); toast("Limits gespeichert"); };
     if (!loose.length) { await apply(); home(); return; }
-    const changes = loose.map(p => `${label(p)}: ${S.cfg.limits[p]} min → ${p in draft ? draft[p] + " min" : "kein Limit"}`);
+    const what = (cfg, p) => p in cfg.limits ? `${cfg.limits[p]} min` : p in (cfg.windows || {}) ? windowText(cfg.windows[p]) : "kein Limit";
+    const changes = loose.map(p => `${label(p)}: ${what(S.cfg, p)} → ${what(draft, p)}`);
     // Lockern: aus der Limits-Seite direkt zur Hürde (ohne zusätzlichen Verlaufseintrag)
     H = { title: "Limits lockern", changes, onPass: apply, mode: "code", code: makeCode(), input: "", endAt: 0, timer: 0 };
     S.view = "hurdle"; render(); scrollTo(0, 0);

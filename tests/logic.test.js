@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   SOCIAL, defaultLimits, loosened, dur, leftText, appState, makeCode, groups, codeMatches, codeProgress,
+  inWindow, hm, hhmm, parseHm, windowState, loosenedCfg,
   CODE_CHARS, CODE_LEN, dayKey, weekday, series, perApp, streak, missing, OWN_PACKAGE, DEFAULT_LIMIT,
 } from "../js/logic.js";
 
@@ -36,6 +37,42 @@ const app = (pkg, never = false) => ({ pkg, label: pkg, never });
   assert.deepEqual(loosened(before, { a: 10, b: 30, c: 15, d: 5 }), []);
   assert.deepEqual(loosened({}, { a: 5 }), []);
   assert.deepEqual(loosened({ a: 5, b: 5 }, {}), ["a", "b"]);
+}
+
+// Zeitfenster: über Mitternacht (19:45–5:00), am Tag, leer
+{
+  const night = [19 * 60 + 45, 5 * 60];
+  assert.equal(inWindow(19 * 60 + 44, night), false);
+  assert.equal(inWindow(19 * 60 + 45, night), true);
+  assert.equal(inWindow(0, night), true);
+  assert.equal(inWindow(4 * 60 + 59, night), true);
+  assert.equal(inWindow(5 * 60, night), false);
+  assert.equal(inWindow(12 * 60, night), false);
+  assert.equal(inWindow(10 * 60, [9 * 60, 17 * 60]), true);
+  assert.equal(inWindow(17 * 60, [9 * 60, 17 * 60]), false);
+  assert.equal(inWindow(10 * 60, [600, 600]), false);
+  assert.equal(hm(300), "5:00");
+  assert.equal(hm(1185), "19:45");
+  assert.equal(hhmm(300), "05:00");
+  assert.equal(parseHm("19:45"), 1185);
+  assert.equal(parseHm(""), null);
+  assert.deepEqual(windowState(night, 12 * 60), { open: false, text: "gesperrt bis 19:45" });
+  assert.deepEqual(windowState(night, 23 * 60), { open: true, text: "frei bis 5:00" });
+}
+
+// Lockern mit Zeitfenstern: Wechsel der Art und breiteres Fenster brauchen die Hürde, engeres nicht
+{
+  const night = [1185, 300];
+  const cfg = (limits, windows) => ({ limits, windows });
+  assert.deepEqual(loosenedCfg(cfg({ t: 20 }, {}), cfg({}, { t: night })), ["t"]);
+  assert.deepEqual(loosenedCfg(cfg({}, { t: night }), cfg({ t: 20 }, {})), ["t"]);
+  assert.deepEqual(loosenedCfg(cfg({}, { t: night }), cfg({}, {})), ["t"]);
+  assert.deepEqual(loosenedCfg(cfg({}, {}), cfg({}, { t: night })), []);
+  assert.deepEqual(loosenedCfg(cfg({}, { t: night }), cfg({}, { t: [1200, 240] })), []);
+  assert.deepEqual(loosenedCfg(cfg({}, { t: night }), cfg({}, { t: [1185, 301] })), ["t"]);
+  assert.deepEqual(loosenedCfg(cfg({}, { t: night }), cfg({}, { t: [1184, 300] })), ["t"]);
+  assert.deepEqual(loosenedCfg(cfg({ a: 20 }, { t: night }), cfg({ a: 10 }, { t: night })), []);
+  assert.deepEqual(loosenedCfg(cfg({ a: 20 }), cfg({ a: 30 })), ["a"]);
 }
 
 // Zeittexte

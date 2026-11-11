@@ -59,6 +59,53 @@ export function loosened(before, after) {
   return [...pkgs].filter(p => lim(after, p) > lim(before, p)).sort();
 }
 
+// ---------- Zeitfenster: App nur von … bis … frei, sonst ganz gesperrt ----------
+// Ein Fenster ist [von, bis] in Minuten nach Mitternacht; bis < von heißt über Mitternacht (19:45–5:00).
+
+export const DEFAULT_WINDOW = [19 * 60, 21 * 60];
+
+/** Ist die Minute des Tages (0–1439) im freien Fenster? */
+export function inWindow(minute, [from, to]) {
+  return from < to ? minute >= from && minute < to : from > to ? minute >= from || minute < to : false;
+}
+
+/** „5:00“, „19:45“ */
+export const hm = min => `${Math.floor(min / 60)}:${String(min % 60).padStart(2, "0")}`;
+/** „08:05“ für <input type="time"> und zurück */
+export const hhmm = min => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+export const parseHm = s => { const m = /^(\d{1,2}):(\d{2})/.exec(s || ""); return m ? Math.min(23, +m[1]) * 60 + Math.min(59, +m[2]) : null; };
+
+export const windowText = ([from, to]) => `frei ${hm(from)}–${hm(to)}`;
+
+/** Stand jetzt: { open, text } – „frei bis 5:00“ bzw. „gesperrt bis 19:45“. */
+export function windowState(w, minute) {
+  const open = inWindow(minute, w);
+  return { open, text: open ? `frei bis ${hm(w[1])}` : `gesperrt bis ${hm(w[0])}` };
+}
+
+/**
+ * Welche Apps durch eine Änderung mehr dürften. cfg = { limits: {pkg: min}, windows: {pkg: [von, bis]} }.
+ * Mehr Zeit: höheres Limit, kein Limit mehr, ein Fenster mit einer Minute, die vorher gesperrt war,
+ * und jeder Wechsel zwischen Tageslimit und Zeitfenster.
+ */
+export function loosenedCfg(before, after) {
+  const bl = before.limits || {}, bw = before.windows || {}, al = after.limits || {}, aw = after.windows || {};
+  const pkgs = new Set([...Object.keys(bl), ...Object.keys(bw), ...Object.keys(al), ...Object.keys(aw)]);
+  const out = [];
+  for (const p of pkgs) {
+    const was = p in bl ? "l" : p in bw ? "w" : "", now = p in al ? "l" : p in aw ? "w" : "";
+    if (!was) continue;
+    if (was !== now) out.push(p);
+    else if (now === "l" ? al[p] > bl[p] : widened(bw[p], aw[p])) out.push(p);
+  }
+  return out.sort();
+}
+
+const widened = (before, after) => {
+  for (let m = 0; m < 1440; m++) if (inWindow(m, after) && !inWindow(m, before)) return true;
+  return false;
+};
+
 /** Dauer: „0 min“, „<1 min“, „12 min“, „1 h“, „1 h 5 min“ (abgerundet auf volle Minuten). */
 export function dur(ms) {
   if (!(ms > 0)) return "0 min";

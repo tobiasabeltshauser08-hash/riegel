@@ -7,9 +7,12 @@ schiebt Riegel den Riegel vor – die App ist bis Mitternacht gesperrt. Alles an
 - **Tageslimits pro App:** 5 bis 120 Minuten. Beim Einrichten sind die installierten bekannten Social-Media-Apps
   (Instagram, TikTok, Snapchat, Facebook, X, Reddit, Threads, Pinterest, Twitch, BeReal, Tumblr, 9GAG) mit 20 min vorgewählt;
   YouTube und jede andere App lassen sich dazunehmen.
+- **Zeitfenster statt Tageslimit:** Mit „Nur frei von … bis …“ ist eine App nur in dieser Zeit frei (ohne Minutenlimit)
+  und sonst ganz gesperrt, z. B. TikTok nur von 19:45 bis 5:00. Auch über Mitternacht. „Mehr Zeit“ gibt es dabei nicht;
+  2 Minuten vor Ende des Fensters kommt eine Warnung.
 - **Sperrbildschirm:** „Zeit für heute aufgebraucht – Instagram: 20 von 20 min genutzt“ mit „Zum Startbildschirm“.
   Die Zurück-Taste wirkt dort nicht. 2 Minuten vor dem Limit kommt eine Warnung.
-- **Lockern kostet Mühe:** Ein Limit erhöhen oder entfernen und „Mehr Zeit für heute“ (+10 min) gehen nur über eine Hürde:
+- **Lockern kostet Mühe:** Ein Limit erhöhen oder entfernen, ein Zeitfenster vergrößern, zwischen Tageslimit und Zeitfenster wechseln und „Mehr Zeit für heute“ (+10 min) gehen nur über eine Hürde:
   entweder einen **zufälligen Code aus 32 Zeichen abtippen** (Einfügen gesperrt) oder **5 Minuten warten**, während Riegel offen bleibt
   (wer die App wechselt, fängt von vorn an). Strenger stellen geht immer sofort.
 - **Statistik:** Social-Media-Zeit heute (gesamt und je App mit Balken), Diagramm der letzten 7 Tage mit Durchschnitt,

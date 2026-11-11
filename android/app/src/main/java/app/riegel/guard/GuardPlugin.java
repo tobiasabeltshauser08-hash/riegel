@@ -149,19 +149,25 @@ public class GuardPlugin extends Plugin {
         } catch (Exception e) { return null; }
     }
 
-    /** { limits: {pkg: min}, extras: {pkg: min} (nur heute), running }. Startet den Wächter, falls er laufen sollte. */
+    /** { limits: {pkg: min}, windows: {pkg: [von, bis]}, extras: {pkg: min} (nur heute), running }. Startet den Wächter, falls er laufen sollte. */
     @PluginMethod
     public void config(PluginCall call) {
         GuardState s = new GuardState(getContext());
         boolean should = GuardService.ensure(getContext());
         JSObject r = new JSObject();
         r.put("limits", toJs(s.limits()));
+        JSObject w = new JSObject();
+        for (Map.Entry<String, int[]> e : s.windows().entrySet()) w.put(e.getKey(), new JSArray().put(e.getValue()[0]).put(e.getValue()[1]));
+        r.put("windows", w);
         r.put("extras", toJs(s.extras()));
         r.put("running", should);
         call.resolve(r);
     }
 
-    /** Limits speichern ({ limits: {pkg: min} }) und den Wächter starten bzw. stoppen. */
+    /**
+     * Limits speichern ({ limits: {pkg: min}, windows: {pkg: [von, bis]} }) und den Wächter starten bzw. stoppen.
+     * Eine App hat entweder ein Tageslimit oder ein Zeitfenster; fehlt „windows“, bleiben die Fenster wie sie sind.
+     */
     @PluginMethod
     public void setLimits(PluginCall call) {
         JSObject in = call.getObject("limits", new JSObject());
@@ -172,7 +178,20 @@ public class GuardPlugin extends Plugin {
             int min = in.optInt(pkg, 0);
             if (min > 0 && !never.contains(pkg)) m.put(pkg, min);
         }
-        new GuardState(getContext()).setLimits(m);
+        GuardState st = new GuardState(getContext());
+        st.setLimits(m);
+        JSObject win = call.getObject("windows", null);
+        if (win != null) {
+            Map<String, int[]> w = new HashMap<>();
+            for (Iterator<String> it = win.keys(); it.hasNext(); ) {
+                String pkg = it.next();
+                org.json.JSONArray a = win.optJSONArray(pkg);
+                if (a == null || a.length() != 2 || never.contains(pkg) || m.containsKey(pkg)) continue;
+                int from = a.optInt(0, -1), to = a.optInt(1, -1);
+                if (from >= 0 && from < 1440 && to >= 0 && to < 1440 && from != to) w.put(pkg, new int[] { from, to });
+            }
+            st.setWindows(w);
+        }
         JSObject r = new JSObject();
         r.put("running", GuardService.ensure(getContext()));
         call.resolve(r);

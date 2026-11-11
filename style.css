@@ -92,6 +92,9 @@ button.banner { width: 100%; border: 0; text-align: left; cursor: pointer; }
 .row select { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 8px 10px; min-height: 40px; }
 .row.pick { grid-template-columns: 36px 1fr auto; }
 .row.pick img, .row.pick .ph { grid-row: auto; }
+.row .win { grid-column: 2 / 4; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: .88rem; color: var(--muted); }
+.row .win input { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 6px 8px; min-height: 40px; }
+.row .win .lim-hint { font-weight: 600; }
 .row .lim-hint { grid-column: 2 / 4; font-size: .78rem; color: var(--accent); }
 
 .search { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 12px 14px; }

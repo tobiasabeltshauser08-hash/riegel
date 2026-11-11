@@ -12,8 +12,8 @@ const native = {
   permissions: () => call("permissions"),                      // { usage, overlay, notifications, battery }
   request: which => call("request", { which }),                // Systemdialog bzw. Systemseite öffnen
   apps: () => call("apps", { known: Object.keys(SOCIAL) }).then(r => r.apps), // [{ pkg, label, icon, never }]
-  config: () => call("config"),                                // { limits: {pkg: min}, extras: {pkg: min}, running }
-  setLimits: limits => call("setLimits", { limits }),          // speichert und startet/stoppt den Wächter
+  config: () => call("config"),                                // { limits: {pkg: min}, windows: {pkg: [von, bis]}, extras: {pkg: min}, running }
+  setLimits: (limits, windows) => call("setLimits", { limits, windows }), // speichert und startet/stoppt den Wächter
   addExtra: (pkg, minutes) => call("addExtra", { pkg, minutes }),
   usage: days => call("usage", { days }).then(r => r.days),     // [{ date, apps: {pkg: ms} }], ältester zuerst
   pendingExtra: () => call("pendingExtra").then(r => r.pkg || null), // „Mehr Zeit“ vom Sperrbildschirm
@@ -33,7 +33,7 @@ const icon = (label, color) => "data:image/svg+xml," + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48"><rect width="48" height="48" rx="12" fill="${color}"/>` +
   `<text x="24" y="31" font-family="Arial" font-size="20" font-weight="700" fill="#fff" text-anchor="middle">${label[0]}</text></svg>`);
 
-const demoState = { limits: null, extras: {}, perms: { usage: false, overlay: false, notifications: false, battery: false } };
+const demoState = { limits: null, windows: {}, extras: {}, perms: { usage: false, overlay: false, notifications: false, battery: false } };
 
 function demoDays(n) {
   const out = [];
@@ -53,8 +53,8 @@ const demo = {
   permissions: async () => ({ ...demoState.perms }),
   request: async which => { demoState.perms[which] = true; return { ...demoState.perms }; },
   apps: async () => DEMO_APPS.map(([pkg, label, c]) => ({ pkg, label, icon: icon(label, c), never: false })),
-  config: async () => ({ limits: demoState.limits || {}, extras: { ...demoState.extras }, running: !!demoState.limits }),
-  setLimits: async limits => { demoState.limits = { ...limits }; return { running: true }; },
+  config: async () => ({ limits: demoState.limits || {}, windows: { ...demoState.windows }, extras: { ...demoState.extras }, running: !!demoState.limits }),
+  setLimits: async (limits, windows) => { demoState.limits = { ...limits }; demoState.windows = { ...windows }; return { running: true }; },
   addExtra: async (pkg, minutes) => { demoState.extras[pkg] = (demoState.extras[pkg] || 0) + minutes; },
   usage: async days => demoDays(days),
   pendingExtra: async () => null,
