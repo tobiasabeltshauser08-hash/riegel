@@ -17,6 +17,9 @@ const app = (pkg, never = false) => ({ pkg, label: pkg, never });
   // Lite-Versionen bekommen ebenfalls ein Limit
   assert.deepEqual(defaultLimits([app("com.instagram.lite"), app("com.zhiliaoapp.musically.go")]),
     { "com.instagram.lite": DEFAULT_LIMIT, "com.zhiliaoapp.musically.go": DEFAULT_LIMIT });
+  // YouTube ist bekannt, wird aber nicht vorgewählt
+  assert.deepEqual(defaultLimits([app("com.google.android.youtube"), app("com.snapchat.android")]),
+    { "com.snapchat.android": DEFAULT_LIMIT });
 }
 
 // Jede bekannte Social-Media-App steht in den <queries> des Manifests, sonst sieht Android sie nicht

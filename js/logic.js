@@ -3,7 +3,7 @@
 
 export const OWN_PACKAGE = "app.riegel";
 
-// Bekannte Social-Media-Apps. Beim Einrichten bekommt jede installierte davon ein Tageslimit.
+// Bekannte Social-Media-Apps. Beim Einrichten bekommt jede installierte davon ein Tageslimit (außer NO_DEFAULT).
 export const SOCIAL = {
   "com.instagram.android": "Instagram",
   "com.instagram.lite": "Instagram Lite",
@@ -30,6 +30,9 @@ export const NEVER = [
   "com.samsung.android.dialer", "com.android.phone", "com.android.systemui", "com.android.emergency",
 ];
 
+// Bekannt, aber beim Einrichten nicht vorgewählt (lässt sich von Hand begrenzen)
+export const NO_DEFAULT = ["com.google.android.youtube"];
+
 export const limitable = app => !app.never && !NEVER.includes(app.pkg);
 
 export const DEFAULT_LIMIT = 20;                       // Minuten pro Tag
@@ -39,10 +42,10 @@ export const WAIT_MS = 5 * 60_000;                     // Hürde: so lange warte
 export const CODE_LEN = 32;                            // … oder so viele Zeichen abtippen
 export const WARN_MS = 2 * 60_000;                     // Hinweis, wenn nur noch so viel übrig ist
 
-/** Startwerte: jede installierte bekannte Social-Media-App bekommt DEFAULT_LIMIT. */
+/** Startwerte: jede installierte bekannte Social-Media-App bekommt DEFAULT_LIMIT (außer NO_DEFAULT). */
 export function defaultLimits(apps) {
   const out = {};
-  for (const a of apps) if (limitable(a) && a.pkg in SOCIAL) out[a.pkg] = DEFAULT_LIMIT;
+  for (const a of apps) if (limitable(a) && a.pkg in SOCIAL && !NO_DEFAULT.includes(a.pkg)) out[a.pkg] = DEFAULT_LIMIT;
   return out;
 }
 
